@@ -129,6 +129,17 @@ Data included realistic **distances**, **cable costs**, and **signal-related par
 - Sample demo outputs and screenshots  
 
 ---
+---
+
+## Contributor
+
+**Vrunda Kamboj**  
+- Implemented BFS-based connectivity checking between campus nodes  
+- Developed Dijkstra’s shortest path logic for optimized routing  
+- Worked on graph representation and algorithm integration  
+- Collaborated via GitHub in a team-based development environment
+
+
 
 ## License
 

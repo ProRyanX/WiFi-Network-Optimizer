@@ -286,119 +286,51 @@
         function runAnalysis() {
             const names = [...elements.nameContainer.querySelectorAll('input')].map(i => i.value.trim());
             if (!names.length || !names.every(n => n) || new Set(names).size !== names.length) {
-                alert('All building names must be non-empty and unique!');
-                return;
+                alert('All building names must be non-empty and unique!'); return;
             }
-
             state.buildingNames = names;
             state.edgeList = [...elements.edgeContainer.querySelectorAll('.edge-row')].map(row => {
                 const [from, to, cost, dist] = row.querySelectorAll('select, input');
                 return { 
-                    from: parseInt(from.value),
-                    to: parseInt(to.value),
-                    cost: parseInt(cost.value) || 0,
+                    u: parseInt(from.value), 
+                    v: parseInt(to.value), 
+                    cost: parseInt(cost.value) || 0, 
                     dist: parseInt(dist.value) || 0 
                 };
             }).filter(e => e.cost >= 0 && e.dist >= 0);
-
-            if (!state.edgeList.length) {
-                alert('No valid edges entered!');
-                return;
-            }
-
-            // Build payload for Flask
-            const payload = {
-                buildings: state.buildingNames,
-                edges: state.edgeList,
-                src: 0,                               // default source for global MST/shortest; you can change later
-                dest: Math.min(1, names.length - 1)
-            };
-
-            // Call backend
-            fetch('/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-            .then(res => res.json())
-            .then(data => {
-                console.log('ANALYZE RESULT:', data);
-                // Show textual + graph results using backend data
-                showTextualResults(data);
-                drawGraph();
-                openPathQueryDialog();
-            })
-            .catch(err => {
-                console.error('Error calling /analyze:', err);
-                alert('Backend error while analyzing network.');
-            });
+            
+            if (!state.edgeList.length) { alert('No valid edges entered!'); return; }
+            showTextualResults();
+            drawGraph();
         }
 
-        function showTextualResults(data) {
+        function showTextualResults() {
             const adj = Array(state.buildingNames.length).fill().map(() => []);
-            state.edgeList.forEach(e => {
-                adj[e.from].push(`${state.buildingNames[e.to]} (c:${e.cost}, d:${e.dist})`);
-            });
-
-            const mstLines = data.mst_edges.map(
-                e => `${e.from} → ${e.to} (c:${e.cost}, d:${e.dist})`
-            ).join('<br>') || 'No MST edges found.';
-
-            const shortestText = (data.shortest_distance == null)
-                ? 'No path (unreachable).'
-                : `${data.shortest_distance}`;
-
+            state.edgeList.forEach(e => adj[e.u].push(`${state.buildingNames[e.v]} (c:${e.cost}, d:${e.dist})`));
             elements.textResults.innerHTML = `
                 <h3>=== ADJACENCY LIST ===</h3>
-                ${state.buildingNames.map((n, i) =>
-                    `<div>${n} → ${adj[i].join(' → ') || 'NULL'}</div>`
-                ).join('')}
+                ${state.buildingNames.map((n, i) => `<div>${n} → ${adj[i].join(' → ') || 'NULL'}</div>`).join('')}
                 <h3>=== MINIMUM SPANNING TREE ===</h3>
-                <div>Total Cost: ${data.mst_cost}</div>
-                <div>Edges:<br>${mstLines}</div>
-                <h3>=== GLOBAL SHORTEST DISTANCE (0 → 1) ===</h3>
-                <div>${shortestText}</div>
+                <div>Total Cost: [call your back-end Kruskal/Prim]</div>
+                <div>Edges: [call your back-end Kruskal/Prim]</div>
             `;
+            openPathQueryDialog();
         }
-
 
         function analyzePath() {
             const startIdx = parseInt(elements.fromBuilding.value);
             const endIdx = parseInt(elements.toBuilding.value);
-
-            const payload = {
-                buildings: state.buildingNames,
-                edges: state.edgeList,
-                src: startIdx,
-                dest: endIdx
-            };
-
-            fetch('/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-            .then(res => res.json())
-            .then(data => {
-                const start = state.buildingNames[startIdx];
-                const end = state.buildingNames[endIdx];
-
-                const pathResults = document.createElement('div');
-                pathResults.innerHTML = `<h3>=== PATH ${start} → ${end} ===</h3>`;
-                pathResults.innerHTML += `<div>Connectivity : ${data.connected ? 'Connected' : 'Not Connected'}</div>`;
-                pathResults.innerHTML += `<div>Shortest Dist: ${
-                    data.shortest_distance == null ? 'No path' : data.shortest_distance
-                }</div>`;
-
-                elements.textResults.appendChild(pathResults);
-                elements.pathModal.style.display = 'none';
-            })
-            .catch(err => {
-                console.error('Error calling /analyze for path:', err);
-                alert('Backend error while analyzing path.');
-            });
+            const start = state.buildingNames[startIdx];
+            const end = state.buildingNames[endIdx];
+            
+            const pathResults = document.createElement('div');
+            pathResults.innerHTML = `<h3>=== PATH ${start} → ${end} ===</h3>`;
+            pathResults.innerHTML += '<div>Connectivity : [call your back-end BFS/DFS]</div>';
+            pathResults.innerHTML += '<div>Shortest Dist: [call your back-end Dijkstra]</div>';
+            
+            elements.textResults.appendChild(pathResults);
+            elements.pathModal.style.display = 'none';
         }
-
 
         function openPathQueryDialog() {
             elements.fromBuilding.innerHTML = elements.toBuilding.innerHTML = 
@@ -410,20 +342,12 @@
 
         function drawGraph() {
             elements.graphContainer.innerHTML = '';
-            const width = elements.graphContainer.clientWidth;
-            const height = elements.graphContainer.clientHeight;
-
-            const svg = d3.select('#graph-container').append('svg')
-                .attr('width', width)
-                .attr('height', height);
-
+            const width = elements.graphContainer.clientWidth, height = elements.graphContainer.clientHeight;
+            const svg = d3.select('#graph-container').append('svg').attr('width', width).attr('height', height);
+            
             const nodes = state.buildingNames.map((name, i) => ({ id: i, name }));
-            const links = state.edgeList.map(e => ({
-                source: e.from,               // was e.u
-                target: e.to,                 // was e.v
-                label: `c:${e.cost}/d:${e.dist}`
-            }));
-
+            const links = state.edgeList.map(e => ({ source: e.u, target: e.v, label: `c:${e.cost}/d:${e.dist}` }));
+            
             const simulation = d3.forceSimulation(nodes)
                 .force('link', d3.forceLink(links).id(d => d.id).distance(100))
                 .force('charge', d3.forceManyBody().strength(-300))
